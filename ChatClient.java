@@ -13,9 +13,16 @@ public class ChatClient {
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader userInput = new BufferedReader(new InputStreamReader(System.in));
 
-            System.out.print("Enter your username: ");
-            String username = userInput.readLine();
-            out.println(username);
+            while (true) {
+                String serverMessage = in.readLine();
+                System.out.println(serverMessage);
+                if (serverMessage.startsWith("Login successful")
+                        || serverMessage.startsWith("Registration successful")) {
+                    break;
+                }
+                String command = userInput.readLine();
+                out.println(command);
+            }
 
             new Thread(() -> {
                 try {

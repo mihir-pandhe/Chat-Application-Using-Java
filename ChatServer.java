@@ -7,6 +7,8 @@ public class ChatServer {
     private static final int PORT = 12345;
     private static final Map<String, ClientHandler> clients = Collections.synchronizedMap(new HashMap<>());
     private static final Map<String, List<ClientHandler>> chatRooms = Collections.synchronizedMap(new HashMap<>());
+    private static final Map<String, String> userCredentials = Collections.synchronizedMap(new HashMap<>());
+    private static final Map<String, List<String>> messageHistory = Collections.synchronizedMap(new HashMap<>());
 
     public static void main(String[] args) {
         System.out.println("Server started. Waiting for clients to connect...");
@@ -42,13 +44,7 @@ public class ChatServer {
         @Override
         public void run() {
             try {
-                // Get client username
-                out.println("Enter your username:");
-                username = in.readLine();
-                synchronized (clients) {
-                    clients.put(username, this);
-                }
-                System.out.println(username + " has joined the chat.");
+                authenticateUser();
 
                 String message;
                 while ((message = in.readLine()) != null) {
@@ -65,6 +61,8 @@ public class ChatServer {
                         listChatRooms();
                     } else if (message.startsWith("/roommsg ")) {
                         sendRoomMessage(message);
+                    } else if (message.startsWith("/users")) {
+                        listOnlineUsers();
                     } else {
                         broadcastMessage(username, message);
                     }
@@ -80,6 +78,43 @@ public class ChatServer {
                     System.out.println(username + " has left the chat.");
                 } catch (IOException e) {
                     e.printStackTrace();
+                }
+            }
+        }
+
+        private void authenticateUser() throws IOException {
+            while (true) {
+                out.println(
+                        "Enter /login <username> <password> to login or /register <username> <password> to register:");
+                String command = in.readLine();
+                if (command.startsWith("/login ")) {
+                    String[] parts = command.split(" ");
+                    if (parts.length == 3 && userCredentials.containsKey(parts[1])
+                            && userCredentials.get(parts[1]).equals(parts[2])) {
+                        username = parts[1];
+                        synchronized (clients) {
+                            clients.put(username, this);
+                        }
+                        System.out.println(username + " has logged in.");
+                        out.println("Login successful. Welcome, " + username + "!");
+                        break;
+                    } else {
+                        out.println("Invalid username or password.");
+                    }
+                } else if (command.startsWith("/register ")) {
+                    String[] parts = command.split(" ");
+                    if (parts.length == 3 && !userCredentials.containsKey(parts[1])) {
+                        userCredentials.put(parts[1], parts[2]);
+                        username = parts[1];
+                        synchronized (clients) {
+                            clients.put(username, this);
+                        }
+                        System.out.println(username + " has registered and logged in.");
+                        out.println("Registration successful. Welcome, " + username + "!");
+                        break;
+                    } else {
+                        out.println("Username already exists or invalid command.");
+                    }
                 }
             }
         }
@@ -109,6 +144,7 @@ public class ChatServer {
             }
             currentRoom = roomName;
             out.println("Joined room: " + roomName);
+            sendRoomHistory(roomName);
         }
 
         private void createChatRoom(String message) {
@@ -119,6 +155,9 @@ public class ChatServer {
                     out.println("Created and joined room: " + roomName);
                     currentRoom = roomName;
                     chatRooms.get(roomName).add(this);
+                    synchronized (messageHistory) {
+                        messageHistory.put(roomName, new ArrayList<>());
+                    }
                 } else {
                     out.println("Room " + roomName + " already exists.");
                 }
@@ -140,12 +179,22 @@ public class ChatServer {
             synchronized (chatRooms) {
                 List<ClientHandler> roomClients = chatRooms.get(currentRoom);
                 if (roomClients != null) {
+                    String formattedMessage = "[Room " + currentRoom + "] " + username + ": " + roomMessage;
+                    synchronized (messageHistory) {
+                        messageHistory.get(currentRoom).add(formattedMessage);
+                    }
                     for (ClientHandler client : roomClients) {
                         if (client != this) {
-                            client.out.println("[Room " + currentRoom + "] " + username + ": " + roomMessage);
+                            client.out.println(formattedMessage);
                         }
                     }
                 }
+            }
+        }
+
+        private void listOnlineUsers() {
+            synchronized (clients) {
+                out.println("Online users: " + clients.keySet());
             }
         }
 
@@ -155,6 +204,17 @@ public class ChatServer {
                 for (ClientHandler client : clients.values()) {
                     if (client != this) {
                         client.out.println(formattedMessage);
+                    }
+                }
+            }
+        }
+
+        private void sendRoomHistory(String roomName) {
+            synchronized (messageHistory) {
+                List<String> history = messageHistory.get(roomName);
+                if (history != null) {
+                    for (String message : history) {
+                        out.println(message);
                     }
                 }
             }
