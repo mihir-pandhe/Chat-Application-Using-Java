@@ -18,7 +18,6 @@ public class ChatServer {
                 Socket clientSocket = serverSocket.accept();
                 System.out.println("Client connected!");
 
-                // Create and start a new thread for each client
                 ClientHandler clientHandler = new ClientHandler(clientSocket);
                 new Thread(clientHandler).start();
             }
@@ -48,47 +47,27 @@ public class ChatServer {
 
                 String message;
                 while ((message = in.readLine()) != null) {
-                    if (message.startsWith("/exit")) {
-                        out.println("You have exited the chat.");
-                        break;
-                    } else if (message.startsWith("/pm ")) {
-                        sendPrivateMessage(message);
-                    } else if (message.startsWith("/join ")) {
-                        joinChatRoom(message);
-                    } else if (message.startsWith("/create ")) {
-                        createChatRoom(message);
-                    } else if (message.startsWith("/rooms")) {
-                        listChatRooms();
-                    } else if (message.startsWith("/roommsg ")) {
-                        sendRoomMessage(message);
-                    } else if (message.startsWith("/users")) {
-                        listOnlineUsers();
-                    } else {
-                        broadcastMessage(username, message);
-                    }
+                    handleMessage(message);
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                System.out.println("Error with client " + username + ": " + e.getMessage());
             } finally {
-                try {
-                    socket.close();
-                    synchronized (clients) {
-                        clients.remove(username);
-                    }
-                    System.out.println(username + " has left the chat.");
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                disconnectClient();
             }
         }
 
         private void authenticateUser() throws IOException {
             while (true) {
                 out.println(
+
                         "Enter /login <username> <password> to login or /register <username> <password> to register:");
                 String command = in.readLine();
+                if (command == null) {
+                    break;
+                }
                 if (command.startsWith("/login ")) {
                     String[] parts = command.split(" ");
+
                     if (parts.length == 3 && userCredentials.containsKey(parts[1])
                             && userCredentials.get(parts[1]).equals(parts[2])) {
                         username = parts[1];
@@ -115,7 +94,33 @@ public class ChatServer {
                     } else {
                         out.println("Username already exists or invalid command.");
                     }
+                } else {
+                    out.println("Invalid command. Please use /login or /register.");
                 }
+            }
+        }
+
+        private void handleMessage(String message) {
+            try {
+                if (message.startsWith("/exit")) {
+                    out.println("You have exited the chat.");
+                } else if (message.startsWith("/pm ")) {
+                    sendPrivateMessage(message);
+                } else if (message.startsWith("/join ")) {
+                    joinChatRoom(message);
+                } else if (message.startsWith("/create ")) {
+                    createChatRoom(message);
+                } else if (message.startsWith("/rooms")) {
+                    listChatRooms();
+                } else if (message.startsWith("/roommsg ")) {
+                    sendRoomMessage(message);
+                } else if (message.startsWith("/users")) {
+                    listOnlineUsers();
+                } else {
+                    out.println("Unknown command. Please try again.");
+                }
+            } catch (Exception e) {
+                out.println("An error occurred: " + e.getMessage());
             }
         }
 
@@ -134,6 +139,8 @@ public class ChatServer {
                         out.println("User " + recipient + " not found.");
                     }
                 }
+            } else {
+                out.println("Invalid command format. Use /pm <username> <message>");
             }
         }
 
@@ -198,14 +205,17 @@ public class ChatServer {
             }
         }
 
-        private void broadcastMessage(String username, String message) {
-            String formattedMessage = "[" + sdf.format(new Date()) + "] " + username + ": " + message;
-            synchronized (clients) {
-                for (ClientHandler client : clients.values()) {
-                    if (client != this) {
-                        client.out.println(formattedMessage);
+        private void disconnectClient() {
+            try {
+                if (username != null) {
+                    synchronized (clients) {
+                        clients.remove(username);
                     }
+                    System.out.println(username + " has disconnected.");
                 }
+                socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
 

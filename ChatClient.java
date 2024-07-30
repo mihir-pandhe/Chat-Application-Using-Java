@@ -15,6 +15,9 @@ public class ChatClient {
 
             while (true) {
                 String serverMessage = in.readLine();
+                if (serverMessage == null) {
+                    break;
+                }
                 System.out.println(serverMessage);
                 if (serverMessage.startsWith("Login successful")
                         || serverMessage.startsWith("Registration successful")) {
@@ -31,7 +34,7 @@ public class ChatClient {
                         System.out.println(message);
                     }
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    System.out.println("Disconnected from server.");
                 }
             }).start();
 
